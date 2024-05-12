@@ -1,0 +1,170 @@
+import React, { useEffect, useState } from 'react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import { Delta as TypeDelta, Sources } from 'quill';
+import Delta from 'quill-delta';
+import { useNavigate } from 'react-router-dom';
+import { Card } from '@/components/Elements/Card';
+import { Button } from '@/components/Elements/Button';
+import { AdminLayout } from '@/components/Layout';
+import './ContentManagement.css';
+import { useContent } from '@/features/admin/api/getContent';
+import { postContent } from '@/features/admin/api/postContent';
+import * as z from 'zod';
+import { Form } from '@/components/Form';
+import { InvestorContent } from '@/types/InvestorContent';
+import ContentManagement from '@/components/Elements/Loader/ContentManagement';
+
+const schema = z.object({
+  page_title: z.string().min(1, 'Please enter company name'),
+  page_content: z.string().min(1, 'Please enter company established'),
+});
+
+type ContactValues = {
+  page_title: string;
+  page_content: string;
+};
+
+const Clipboard = ReactQuill.import('modules/clipboard');
+var Delta = ReactQuill.import('delta');
+
+class PlainClipboard extends Clipboard {
+  convert(html = null) {
+    if (typeof html === 'string') {
+      this.container.innerHTML = html;
+    }
+    const text = this.container.innerText;
+    this.container.innerHTML = '';
+    return new Delta().insert(text);
+  }
+}
+
+Quill.register('modules/clipboard', PlainClipboard, true);
+
+function EditContent() {
+  const searchParams = new URLSearchParams(document.location.search);
+  const pageName = searchParams.get('pageName');
+  const { data, isLoading, isRefetching, refetch } = useContent();
+  console.log(data, 'asssssssssssssssssssssssssssssss');
+  const user = data?.data ?? ({} as InvestorContent);
+
+  const delta = new Delta([{ insert: `${data?.data.page_content}` }]) as unknown as TypeDelta;
+  const [value, setValue] = useState(delta);
+
+  const onEditorChange = (
+    value: string,
+    delta: TypeDelta,
+    source: Sources,
+    editor: ReactQuill.UnprivilegedEditor
+  ) => {
+    editor?.clipboard.dangerouslyPasteHTML(data?.data.page_content);
+
+    setValue(editor.getContents());
+  };
+
+  useEffect(() => {
+    if (data) {
+      const delta = new Delta([{ insert: `${data?.data.page_content}` }]) as unknown as TypeDelta;
+      setValue(delta);
+    }
+  }, [data, isLoading, isRefetching]);
+
+  const handleSubmit = async () => {
+    const val = document.querySelector('.ql-editor');
+    const content = val?.innerHTML;
+    try {
+      await postContent({ page_title: data?.data?.page_title ?? '', page_content: content ?? '' });
+      console.log('Submitted');
+      refetch();
+    } finally {
+      console.log('Not Submitted');
+    }
+  };
+  const navigate = useNavigate();
+  const modules = {
+    toolbar: [
+      [{ header: [1, 2, 3, 4, false] }],
+      [{ font: [] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+      ['link', 'image'],
+      [{ color: [] }, { background: [] }],
+      ['clean'],
+    ],
+  };
+
+  const formats = [
+    'header',
+    'font',
+    'bold',
+    'italic',
+    'underline',
+    'strike',
+    'blockquote',
+    'list',
+    'bullet',
+    'indent',
+    'link',
+    'image',
+    'color',
+  ];
+
+  return (
+    <>
+      <AdminLayout title="Edit Content Management">
+        <Card shadow>
+          <div className="p-3 pb-0">
+            <h5>
+              <strong> {pageName} </strong>
+            </h5>
+          </div>
+          {isLoading || isRefetching ? (
+            <ContentManagement />
+          ) : (
+            <Form<ContactValues, typeof schema>
+              onSubmit={handleSubmit}
+              schema={schema}
+              options={{
+                defaultValues: user,
+              }}
+            >
+              {({ register, formState }) => (
+                <>
+                  <div className="mx-4">
+                    {/* <InputField
+                      type="text"
+                      label="Title"
+                      error={formState.errors['page_title']}
+                      registration={register('page_title')}
+                    />
+                    <TextAreaField
+                      label="Content"
+                      rows={4}
+                      error={formState.errors['page_content']}
+                      registration={register('page_content')}
+                    /> */}
+                    <ReactQuill
+                      theme="snow"
+                      modules={modules}
+                      formats={formats}
+                      value={value}
+                      onChange={onEditorChange}
+                    />
+                    <div className="d-flex justify-content-end my-5">
+                      <Button onClick={() => navigate(-1)} variant="inverse" block className="me-3">
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSubmit}>Submit</Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </Form>
+          )}
+        </Card>
+      </AdminLayout>
+    </>
+  );
+}
+
+export default EditContent;
